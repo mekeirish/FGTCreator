@@ -319,7 +319,38 @@
             align-items: center;
         }
 
-        .repo-item .btn-create {
+        .repo-item .btn-copy-token {
+            background: transparent;
+            color: #58a6ff;
+            border: 1px solid #30363d;
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .repo-item .btn-copy-token:hover {
+            background: #1f2937;
+            border-color: #58a6ff;
+        }
+
+        .repo-item .btn-delete-token {
+            background: transparent;
+            color: #8b949e;
+            border: 1px solid #30363d;
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .repo-item .btn-delete-token:hover {
+            background: #2d0f0f;
+            color: #ff7b72;
+            border-color: #da3633;
+        }
+
+        .repo-item .btn-create-manual {
             background: #1f2937;
             color: #c9d1d9;
             border: 1px solid #30363d;
@@ -331,37 +362,11 @@
             transition: background 0.15s, border-color 0.15s;
             white-space: nowrap;
         }
-        .repo-item .btn-create:hover {
+        .repo-item .btn-create-manual:hover {
             background: #30363d;
             border-color: #484f58;
         }
-        .repo-item .btn-create:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-        .repo-item .btn-create.creating {
-            background: #1f2937;
-            opacity: 0.7;
-            cursor: wait;
-        }
 
-        .repo-item .btn-delete-token {
-            background: transparent;
-            color: #8b949e;
-            border: 1px solid #30363d;
-            padding: 0.3rem 0.7rem;
-            border-radius: 6px;
-            font-size: 0.7rem;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s;
-        }
-        .repo-item .btn-delete-token:hover {
-            background: #2d0f0f;
-            color: #ff7b72;
-            border-color: #da3633;
-        }
-
-        /* Manual token input inside repo item */
         .manual-token-area {
             display: flex;
             flex-wrap: wrap;
@@ -603,10 +608,7 @@
             border-left: 4px solid #58a6ff;
         }
     </style>
-
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#4b6cb7">
-<link rel="apple-touch-icon" href="icon.png"></head>
+</head>
 <body>
 
     <div class="container">
@@ -614,7 +616,7 @@
         <!-- ===== HEADER ===== -->
         <div class="header">
             <h1>⚡ FGT Creator</h1>
-            <span class="badge-version">v2.0</span>
+            <span class="badge-version">v3.0</span>
             <span style="margin-left:auto; font-size:0.8rem; color:#484f58;">Fine‑Grained Token Manager</span>
         </div>
 
@@ -694,7 +696,8 @@
 
     <script>
         /* ============================================================
-               FGT Creator — v2.0 avec saisie manuelle de token
+               FGT Creator — v3.0 : uniquement création manuelle via lien
+               + bouton copier sur chaque repo
                ============================================================ */
 
         (function() {
@@ -722,7 +725,6 @@
             // ---- State ----
             let currentPat = '';
             let repos = [];
-            let isCreating = {}; // { repoId: true/false }
             let showManualInput = {}; // { repoId: true/false }
 
             // ---- Stockage localStorage ----
@@ -823,7 +825,6 @@
                     const hasToken = !!tokens[repo.id];
                     const badgeClass = hasToken ? 'badge-active' : 'badge-inactive';
                     const badgeText = hasToken ? '✅ FGT actif' : '⬜ Aucun FGT';
-                    const creating = isCreating[repo.id] || false;
                     const showManual = showManualInput[repo.id] || false;
 
                     html += `
@@ -836,13 +837,11 @@
                                 <span class="badge ${badgeClass}">${badgeText}</span>
                                 <div class="actions">
                                     ${hasToken ? `
+                                        <button class="btn-copy-token" data-repo-id="${repo.id}" title="Copier le token">📋 Copier</button>
                                         <button class="btn-delete-token" data-repo-id="${repo.id}" title="Supprimer le token stocké pour ce repo">🗑️</button>
-                                    ` : ''}
-                                    <button class="btn-create ${creating ? 'creating' : ''}" 
-                                            data-repo-id="${repo.id}" 
-                                            ${creating ? 'disabled' : ''}>
-                                        ${creating ? '⏳ Création…' : '🔐 Créer FGT'}
-                                    </button>
+                                    ` : `
+                                        <button class="btn-create-manual" data-repo-id="${repo.id}">🔗 Créer sur GitHub</button>
+                                    `}
                                 </div>
                                 ${showManual ? `
                                     <div class="manual-token-area">
@@ -858,13 +857,21 @@
                 updateStats();
 
                 // ---- Event listeners ----
-                repoList.querySelectorAll('.btn-create').forEach(btn => {
+                // Copier le token depuis le repo
+                repoList.querySelectorAll('.btn-copy-token').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const repoId = parseInt(btn.dataset.repoId);
-                        handleCreateFgt(repoId);
+                        const token = getTokenForRepo(repoId);
+                        if (token) {
+                            copyToClipboard(token);
+                            showToast('✅ Token copié dans le presse‑papier !', 'success');
+                        } else {
+                            showToast('❌ Aucun token trouvé pour ce repo.', 'warning');
+                        }
                     });
                 });
 
+                // Supprimer le token
                 repoList.querySelectorAll('.btn-delete-token').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const repoId = parseInt(btn.dataset.repoId);
@@ -872,6 +879,15 @@
                     });
                 });
 
+                // Créer manuellement : ouvrir GitHub et afficher le champ
+                repoList.querySelectorAll('.btn-create-manual').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const repoId = parseInt(btn.dataset.repoId);
+                        handleOpenGitHubCreate(repoId);
+                    });
+                });
+
+                // Enregistrer le token saisi manuellement
                 repoList.querySelectorAll('.btn-save-manual').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const repoId = parseInt(btn.dataset.repoId);
@@ -882,7 +898,6 @@
                             showToast('Veuillez coller un token valide.', 'warning');
                             return;
                         }
-                        // Sauvegarder le token manuel
                         setTokenForRepo(repoId, token);
                         showManualInput[repoId] = false;
                         renderRepos();
@@ -898,6 +913,43 @@
                         renderRepos();
                     });
                 });
+            }
+
+            // ---- Copier dans le presse-papiers (fallback inclus) ----
+            function copyToClipboard(text) {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+                } else {
+                    fallbackCopy(text);
+                }
+            }
+
+            function fallbackCopy(text) {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
+
+            // ---- Ouvrir GitHub pour créer le token et afficher le champ manuel ----
+            function handleOpenGitHubCreate(repoId) {
+                const repo = repos.find(r => r.id === repoId);
+                if (!repo) {
+                    showToast('❌ Repo introuvable.', 'error');
+                    return;
+                }
+
+                // Ouvrir la page de création de token avec le repo pré‑rempli
+                const url =
+                    `https://github.com/settings/personal-access-tokens/new?repo=${repo.full_name}&name=fgt-${repo.name}`;
+                window.open(url, '_blank');
+
+                // Afficher le champ de saisie manuelle
+                showManualInput[repoId] = true;
+                renderRepos();
+                showToast('🔗 Page GitHub ouverte. Collez le token dans le champ apparu.', 'info', 6000);
             }
 
             // ---- Render stored tokens (bottom) ----
@@ -937,17 +989,8 @@
                         const repoId = parseInt(btn.dataset.repoId);
                         const token = getTokenForRepo(repoId);
                         if (token) {
-                            navigator.clipboard.writeText(token).then(() => {
-                                showToast('✅ Token copié !', 'success');
-                            }).catch(() => {
-                                const textArea = document.createElement('textarea');
-                                textArea.value = token;
-                                document.body.appendChild(textArea);
-                                textArea.select();
-                                document.execCommand('copy');
-                                document.body.removeChild(textArea);
-                                showToast('✅ Token copié !', 'success');
-                            });
+                            copyToClipboard(token);
+                            showToast('✅ Token copié !', 'success');
                         }
                     });
                 });
@@ -980,121 +1023,10 @@
                 }
                 if (confirm(`Supprimer le token fine‑grained pour le repo #${repoId} ?`)) {
                     deleteTokenForRepo(repoId);
-                    // Si le champ manuel était ouvert, on le ferme
                     showManualInput[repoId] = false;
                     renderRepos();
                     renderTokens();
                     showToast('🗑️ Token supprimé', 'info', 1500);
-                }
-            }
-
-            // ---- CREATE fine‑grained token (via API) ----
-            async function handleCreateFgt(repoId) {
-                if (!currentPat) {
-                    setStatus('❌ Veuillez d\'abord entrer un PAT et charger vos repos.', 'error');
-                    return;
-                }
-
-                // Vérifier si un token existe déjà
-                if (getTokenForRepo(repoId)) {
-                    if (!confirm(`Un token fine‑grained existe déjà pour ce repo. Voulez‑vous le remplacer ?`)) {
-                        return;
-                    }
-                    deleteTokenForRepo(repoId);
-                }
-
-                const repo = repos.find(r => r.id === repoId);
-                if (!repo) {
-                    showToast('❌ Repo introuvable.', 'error');
-                    return;
-                }
-
-                // Marquer comme en cours
-                isCreating[repoId] = true;
-                renderRepos();
-
-                try {
-                    setStatus(`⏳ Création du token pour ${repo.name}…`, 'info');
-
-                    const tokenName = `fgt-${repo.name}-${Date.now().toString(36)}`;
-
-                    const response = await fetch('https://api.github.com/user/personal-access-tokens', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${currentPat}`,
-                            'Accept': 'application/vnd.github+json',
-                            'X-GitHub-Api-Version': '2022-11-28',
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            name: tokenName,
-                            repository_ids: [repoId],
-                            permissions: {
-                                contents: 'read',
-                                metadata: 'read',
-                                gists: 'write',
-                                pull_requests: 'read',
-                                issues: 'read',
-                            },
-                        }),
-                    });
-
-                    const data = await response.json();
-
-                    if (!response.ok) {
-                        let errMsg = data.message || 'Erreur inconnue';
-                        if (response.status === 404) {
-                            errMsg =
-                                '❌ Endpoint non trouvé. Votre PAT est-il valide ? Assurez-vous d\'utiliser un token classique (pas fine‑grained) avec les scopes `repo` ou `admin:org`.';
-                        } else if (response.status === 403) {
-                            errMsg =
-                                '❌ Permission insuffisante. Votre PAT doit avoir le scope `admin:org` (pour les orgs) ou `repo` (pour les repos perso).';
-                        } else if (response.status === 422) {
-                            errMsg = '❌ Données invalides. ' + (data.message || '');
-                        }
-                        throw new Error(errMsg);
-                    }
-
-                    const newToken = data.token;
-                    if (!newToken) {
-                        throw new Error('La réponse de l\'API ne contient pas de token.');
-                    }
-
-                    setTokenForRepo(repoId, newToken);
-                    setStatus(`✅ Token fine‑grained créé avec succès pour ${repo.name} !`, 'success');
-                    showToast(`✅ Token créé pour ${repo.name}`, 'success', 3000);
-
-                    renderRepos();
-                    renderTokens();
-
-                } catch (err) {
-                    console.error('Erreur création FGT:', err);
-                    setStatus(`❌ Échec : ${err.message}`, 'error');
-                    showToast(`❌ ${err.message}`, 'error', 5000);
-
-                    // Proposer la saisie manuelle
-                    const shouldOpen = confirm(
-                        `💡 La création automatique a échoué.\n\n` +
-                        `Souhaitez-vous ouvrir la page GitHub pour créer le token manuellement ?\n` +
-                        `(Une fois créé, vous pourrez le coller directement dans le champ qui apparaîtra.)`
-                    );
-                    if (shouldOpen) {
-                        const url =
-                            `https://github.com/settings/personal-access-tokens/new?repo=${repo.full_name}&name=fgt-${repo.name}`;
-                        window.open(url, '_blank');
-                        // Afficher le champ de saisie manuelle
-                        showManualInput[repoId] = true;
-                        renderRepos();
-                        showToast('🔗 Page GitHub ouverte. Collez le token dans le champ affiché.', 'info', 6000);
-                    } else {
-                        // On peut aussi afficher le champ manuel sans ouvrir la page
-                        showManualInput[repoId] = true;
-                        renderRepos();
-                        showToast('✏️ Vous pouvez coller manuellement le token dans le champ apparu.', 'info', 4000);
-                    }
-                } finally {
-                    delete isCreating[repoId];
-                    renderRepos();
                 }
             }
 
@@ -1141,7 +1073,6 @@
                     }
 
                     repos = data;
-                    // Réinitialiser les états manuels
                     showManualInput = {};
                     renderRepos();
                     renderTokens();
@@ -1215,7 +1146,7 @@
                     }
                 });
 
-                console.log('🚀 FGT Creator v2.0 initialisé.');
+                console.log('🚀 FGT Creator v3.0 (manuel) initialisé.');
             }
 
             if (document.readyState === 'loading') {
@@ -1227,7 +1158,5 @@
         })();
     </script>
 
-
-<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));}</script>
 </body>
 </html>
